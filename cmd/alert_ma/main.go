@@ -4,7 +4,7 @@ import (
 	"github.com/ducnt114/binance-go"
 	"log"
 	"time"
-	"binance-alert/common"
+	"github.com/ducnt114/binance-alert/common"
 	"fmt"
 	"strings"
 )
