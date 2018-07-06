@@ -8,10 +8,10 @@ import (
 )
 
 func AlertToTelegram(msg string) {
-	postURL := ""
+	postURL := "https://api.telegram.org/bot549189457:AAFtufO9rWm3N00JxQMlaBxcryS8DWj5Xd8/sendMessage"
 
 	form := url.Values{}
-	form.Add("chat_id", "")
+	form.Add("chat_id", "-253679066")
 	form.Add("text", msg)
 	req, err := http.NewRequest("POST", postURL, strings.NewReader(form.Encode()))
 	if err != nil {

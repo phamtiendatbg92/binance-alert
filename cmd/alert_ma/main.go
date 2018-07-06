@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 	"github.com/ducnt114/binance-go"
-	"fmt"
 	"time"
+	"fmt"
 	"strings"
 	"binance-alert/common"
 )
@@ -19,7 +19,7 @@ func CurrentTime() int64 {
 }
 
 func CheckMA(currentPrice float64, avgPrice float64, maxDelta float64) bool {
-	if currentPrice <= avgPrice {
+	if currentPrice <= avgPrice || avgPrice == 0{
 		return false
 	} else {
 		var delta = (currentPrice - avgPrice) / avgPrice
@@ -49,11 +49,15 @@ func GetMAValue(symbol string, frame int64) float64 {
 		interval = binance_go.Interval1d
 	case 4:
 		interval = binance_go.Interval4h
+		startTime = (time.Now().Unix() - (dayDelay+NUMBER_CANDLE_STICK + 1)*frame*60*60) * 1000
 	case 1:
 		interval = binance_go.Interval1h
 	}
 
 	data, err := binanceClient.GetCandlestickData(symbol, interval, startTime, endTime)
+	if len(data) != 13{
+		return 0
+	}
 	if err != nil {
 		log.Println(err)
 		return 0
@@ -91,6 +95,9 @@ func main() {
 		}
 
 		var avg1Day = GetMAValue(s.Symbol, 24)
+		if avg1Day == 0{
+			continue
+		}
 		var currentPrice = GetCurrentPrice(s.Symbol)
 		// Make sure current is not higher than average price too much (15%)
 		if CheckMA(currentPrice, avg1Day, 0.15) {
@@ -103,9 +110,7 @@ func main() {
 	}
 
 	alertString := strings.Join(listAlert, ",")
-	//fmt.Println("MA/EMA alert: %s", alertString)
 	common.AlertToTelegram(fmt.Sprintf("Múc: %s", alertString))
 
 	log.Println("Done")
-
 }
