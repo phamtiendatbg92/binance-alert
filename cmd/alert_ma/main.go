@@ -5,12 +5,15 @@ import (
 	"github.com/ducnt114/binance-go"
 	"time"
 	"fmt"
-	"strings"
-	"binance-alert/common"
 )
 
-const dayDelay = 8
-const NUMBER_CANDLE_STICK = 13
+const (
+	dayDelay            = 8
+	NUMBER_CANDLE_STICK = 13
+	EMA9                = "ema9"
+	EMA12               = "ema12"
+	EMA26               = "ema26"
+)
 
 var binanceClient = binance_go.NewBinanceClient()
 
@@ -19,7 +22,7 @@ func CurrentTime() int64 {
 }
 
 func CheckMA(currentPrice float64, avgPrice float64, maxDelta float64) bool {
-	if currentPrice <= avgPrice || avgPrice == 0{
+	if currentPrice <= avgPrice || avgPrice == 0 {
 		return false
 	} else {
 		var delta = (currentPrice - avgPrice) / avgPrice
@@ -49,13 +52,18 @@ func GetMAValue(symbol string, frame int64) float64 {
 		interval = binance_go.Interval1d
 	case 4:
 		interval = binance_go.Interval4h
-		startTime = (time.Now().Unix() - (dayDelay+NUMBER_CANDLE_STICK + 1)*frame*60*60) * 1000
+		//startTime = (time.Now().Unix() - (dayDelay+NUMBER_CANDLE_STICK + 1)*frame*60*60) * 1000
 	case 1:
 		interval = binance_go.Interval1h
 	}
 
 	data, err := binanceClient.GetCandlestickData(symbol, interval, startTime, endTime)
-	if len(data) != 13{
+	fmt.Println(len(data))
+	if (len(data) == 12) {
+		startTime = (time.Now().Unix() - (dayDelay+NUMBER_CANDLE_STICK+1)*frame*60*60) * 1000
+		data, err = binanceClient.GetCandlestickData(symbol, interval, startTime, endTime)
+	}
+	if len(data) != 13 {
 		return 0
 	}
 	if err != nil {
@@ -79,38 +87,89 @@ func FindBuyPoint(symbol string) bool {
 	return CheckMA(currentPrice, avgPrice, 0.05)
 }
 
-func main() {
+func CalculateEMA(data []float64, emaType string) float64 {
 
-	listSymbol, err := binanceClient.GetListSymbol()
-	if err != nil {
-		log.Fatal(err)
+	if (len(data) != 52) {
+		return 0
+	}
+	var startDay int
+	var emaWeight float64
+	switch emaType {
+	case EMA9:
+		emaWeight = 0.2
+		startDay = 9
+	case EMA12:
+		emaWeight = 0.15
+		startDay = 12
+	case EMA26:
+		emaWeight = 0.075
+		startDay = 26
 	}
 
-	log.Println("Len symbol: ", len(listSymbol))
-	listAlert := make([]string, 0)
+	var ema26 float64
 
-	for _, s := range listSymbol {
-		if s.QuoteAsset != binance_go.BTCSymbol {
-			continue
+	for i := 0; i < startDay; i++ {
+		ema26 += data[i]
+	}
+	ema26 = ema26 / float64(startDay)
+
+	for i := startDay; i < len(data); i++ {
+		ema26 = ema26*(1-emaWeight) + data[i]*emaWeight
+	}
+	return ema26
+}
+
+func GetArrayValueFromData(data []*binance_go.CandlestickData) []float64 {
+	var array = make([]float64, len(data))
+	for i, d := range data {
+		array[i] = d.ClosePrice
+	}
+	return array
+}
+func main() {
+	/*
+		listSymbol, err := binanceClient.GetListSymbol()
+		if err != nil {
+			log.Fatal(err)
 		}
 
-		var avg1Day = GetMAValue(s.Symbol, 24)
-		if avg1Day == 0{
-			continue
-		}
-		var currentPrice = GetCurrentPrice(s.Symbol)
-		// Make sure current is not higher than average price too much (15%)
-		if CheckMA(currentPrice, avg1Day, 0.15) {
-			// check frame 4h to find best point to buy
-			if FindBuyPoint(s.Symbol) {
-				listAlert = append(listAlert, s.Symbol)
-				log.Println("Alert to telegram with symbol: ", s.Symbol)
+		log.Println("Len symbol: ", len(listSymbol))
+		listAlert := make([]string, 0)
+
+		for _, s := range listSymbol {
+			if s.QuoteAsset != binance_go.BTCSymbol {
+				continue
+			}
+
+			var avg1Day = GetMAValue(s.Symbol, 24)
+			if avg1Day == 0{
+				continue
+			}
+			var currentPrice = GetCurrentPrice(s.Symbol)
+			// Make sure current is not higher than average price too much (15%)
+			if CheckMA(currentPrice, avg1Day, 0.15) {
+				// check frame 4h to find best point to buy
+				if FindBuyPoint(s.Symbol) {
+					listAlert = append(listAlert, s.Symbol)
+					log.Println("Alert to telegram with symbol: ", s.Symbol)
+				}
 			}
 		}
-	}
 
-	alertString := strings.Join(listAlert, ",")
-	common.AlertToTelegram(fmt.Sprintf("Múc: %s", alertString))
+		alertString := strings.Join(listAlert, ",")
+		//common.AlertToTelegram(fmt.Sprintf("Múc: %s", alertString))
+		fmt.Println("%s",alertString)
+		log.Println("Done")
+	*/
 
-	log.Println("Done")
+	startTime := (time.Now().Unix() - (52)*24*60*60) * 1000
+	endTime := time.Now().Unix() * 1000
+
+	data, _ := binanceClient.GetCandlestickData("BCCBTC", binance_go.Interval1d, startTime, endTime)
+	var ema26 = CalculateEMA(GetArrayValueFromData(data), EMA26)
+	var ema12 = CalculateEMA(GetArrayValueFromData(data), EMA12)
+	var ema9 = CalculateEMA(GetArrayValueFromData(data), EMA9)
+	//var deltaEMA = ema12 - ema26
+	//var ema26 = CalculateEMA(GetArrayValueFromData(data), EMA26)
+	fmt.Println( ema26, ema12, ema9)
 }
